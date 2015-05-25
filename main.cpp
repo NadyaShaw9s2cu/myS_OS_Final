@@ -26,7 +26,7 @@ int myargc;
 char myargv[maxValue][maxPath];
 
 enum OPER{
-   QUIT,CD, LS, CP, PIPE, RED, EDIT, COMPILE, WRONG
+   QUIT,CD, LS, CP, PIPE, REDIN, REDOUT, EDIT, COMPILE, WRONG
 };
 
 void mycd() {
@@ -114,8 +114,10 @@ void mycp() {
 void myPipe() {
     puts("mPipe");
 }
-void myRed(){
+void myRedIn(){
     puts("myRed");
+}
+void myRedOut() {
 }
 void myEdit(){
     puts("myEdit");
@@ -169,8 +171,9 @@ int splitCmdB() {
 
     int ret = 0;
     for(int i = 0; i <= CmdLength; i ++){
-        if(MyCmd[i] == '>' || MyCmd[i] == '|' || MyCmd[i] == '\0') {
-            if(MyCmd[i] == '>') ret = RED;
+        if(MyCmd[i] == '>' || MyCmd[i] == '|' || MyCmd[i] == '\0' || MyCmd[i] == '<') {
+            if(MyCmd[i] == '>') ret = REDOUT;
+            if(MyCmd[i] == '<') ret = REDIN;
             if(MyCmd[i] == '|') ret = PIPE;
             if(prep == i-1) return WRONG;
             prep = i;
@@ -191,15 +194,16 @@ int getOperatorStyle() {
     CmdLength = strlen(MyCmd);
     if(CmdLength == 1 && MyCmd[0] == 'q') return QUIT;
 
-    bool pipeExist = false, redExist = false;
+    bool pipeExist = false, redOutExist = false, redInExist = false;
     for(int i = 0; i < CmdLength; i ++) {
         if(MyCmd[i] == '|') pipeExist = true;
-        if(MyCmd[i] == '>') redExist = true;
+        else if(MyCmd[i] == '>') redOutExist = true;
+        else if(MyCmd[i] == '<') redInExist = true;
     }
 
-    if(pipeExist && redExist) return WRONG;
+    if(pipeExist && redInExist || (pipeExist && redOutExist) || (redInExist && redOutExist)) return WRONG;
 
-    if(pipeExist || redExist) {
+    if(pipeExist || redInExist || redOutExist) {
         return splitCmdB();
     }else{
         return splitCmdA();
