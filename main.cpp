@@ -15,9 +15,12 @@
 #include <wait.h>
 #include <unistd.h>
 #include <sys/ipc.h>
+#include <fcntl.h>
+const int maxWordLen = 65536;
 const int maxPath = 1024;
 const int maxValue = 10;
 
+char WordBufPool[maxWordLen];
 char WorkPath[maxPath];
 char MyCmdHead[maxPath];
 char MyCmd[maxPath];
@@ -25,29 +28,29 @@ int CmdLength;
 int myargc;
 char myargv[maxValue][maxPath];
 
-enum OPER{
-   QUIT,CD, LS, CP, PIPE, REDIN, REDOUT, EDIT, COMPILE, WRONG
+enum OPER {
+    QUIT,CD, LS, CP, PIPE, REDIN, REDOUT, EDIT, COMPILE, WRONG
 };
 
 void mycd() {
     if(myargc != 2) {
         puts("Wrong Command!");
         return ;
-    }else{
+    } else {
         if(strcmp(myargv[1], "..") == 0) {
-			int pt = 0;
-			int wlen = strlen(WorkPath);
-			for(int i = 0; i < wlen; i ++) {
-				if( WorkPath[i] == '/') pt = i;
-			}
-			WorkPath[pt+1] = '\0';
-		}else if(myargv[1][0] != '/'){
-			strcat(WorkPath, myargv[1]);
-		}
+            int pt = 0;
+            int wlen = strlen(WorkPath);
+            for(int i = 0; i < wlen; i ++) {
+                if( WorkPath[i] == '/') pt = i;
+            }
+            WorkPath[pt+1] = '\0';
+        } else if(myargv[1][0] != '/') {
+            strcat(WorkPath, myargv[1]);
+        }
 
-		if(chdir(WorkPath) != 0) {
-			perror("CD Error: ");
-			return ;
+        if(chdir(WorkPath) != 0) {
+            perror("CD Error: ");
+            return ;
         }
         memset(MyCmdHead, '\0', sizeof(MyCmd));
         strcat(MyCmdHead, "user@linux:");
@@ -62,7 +65,7 @@ void myls() {
     if(myargc == 1) {
         strcpy(myargv[1], ".");
         myargc = 2;
-    }else if(myargc == 2 && strcmp(myargv[1], "-l") == 0) {
+    } else if(myargc == 2 && strcmp(myargv[1], "-l") == 0) {
         strcpy(myargv[2], myargv[1]);
         strcpy(myargv[1], ".");
         myargc = 3;
@@ -72,7 +75,7 @@ void myls() {
         for(int i = 0; i <myargc; i ++) {
             mycmd[i] = myargv[i];
         }
-    }else {
+    } else {
         puts("Wrong Command!");
         return ;
     }
@@ -89,6 +92,7 @@ void myls() {
     }
     while(wait(0) != -1);
 }
+
 void mycp() {
     sprintf(myargv[0], "%s/", WorkPath);
     strcat(myargv[0], "cp");
@@ -111,29 +115,88 @@ void mycp() {
     }
     while(wait(0) != -1);
 }
+
 void myPipe() {
     puts("mPipe");
 }
-void myRedIn(){
-    puts("myRed");
+
+//redirect input
+void myRedIn() {
+
+    pid_t pid;
+    char buf[maxPath];
+    strcpy(buf, WorkPath);
+    strcat(buf, "/");
+    strcat(buf, myargv[0]);
+
+    if((pid = fork()) == -1) {
+        perror("Redirect fork error:");
+        exit(-1);
+    }
+
+    if(pid == 0) {
+
+        int fd = open(myargv[1], O_RDONLY);
+        int newfd = dup2(fd, 0);
+        close(fd);
+        if(newfd != 0) {
+            puts("Could not duplicate.");
+            return ;
+        }
+
+        char* mycmd[]= {buf, NULL};
+        if( execv(myargv[0], mycmd) < 0) {
+            perror("Redirect execlp error:");
+            exit(-1);
+        }
+    }
+
+    if(pid != 0) {
+        wait(NULL);
+    }
 }
 void myRedOut() {
+    pid_t pid;
+    int fd = 0;
+
+    if((pid = fork()) == -1) {
+        perror("Redirect fork error:");
+        exit(-1);
+    }
+    char buf[maxPath];
+    strcpy(buf, WorkPath);
+    strcat(buf, "/");
+    strcat(buf, myargv[0]);
+
+    if(pid == 0) {
+        close(1);
+        fd = creat(myargv[1], 0644);
+        char* mycmd[]= {buf, NULL};
+        if( execv(myargv[0], mycmd) < 0) {
+            perror("Redirect execlp error:");
+            exit(-1);
+        }
+    }
+
+    if(pid != 0) {
+        wait(NULL);
+    }
 }
-void myEdit(){
+void myEdit() {
     puts("myEdit");
 }
-void myCompile(){
+void myCompile() {
     puts("myCompile");
 }
 void clearAll() {
     puts("clearAll");
 }
-void wrongCmd(){
+void wrongCmd() {
     puts("wrongCmd");
     clearAll();
 }
 
-void myInitialize(){
+void myInitialize() {
     getcwd(WorkPath, maxPath);
     memset(MyCmdHead, '\0', sizeof(MyCmd));
     strcat(MyCmdHead, "user@linux:");
@@ -150,7 +213,7 @@ int splitCmdA() {
             myargv[cnt][pt ++] = '\0';
             cnt ++;
             pt = 0;
-        }else{
+        } else {
             myargv[cnt][pt++] = MyCmd[i];
         }
     }
@@ -170,7 +233,7 @@ int splitCmdB() {
     int prep = -2;
 
     int ret = 0;
-    for(int i = 0; i <= CmdLength; i ++){
+    for(int i = 0; i <= CmdLength; i ++) {
         if(MyCmd[i] == '>' || MyCmd[i] == '|' || MyCmd[i] == '\0' || MyCmd[i] == '<') {
             if(MyCmd[i] == '>') ret = REDOUT;
             if(MyCmd[i] == '<') ret = REDIN;
@@ -180,9 +243,9 @@ int splitCmdB() {
             myargv[cnt][pt++] = '\0';
             cnt ++;
             pt = 0;
-        }else if(MyCmd[i] == ' '){
+        } else if(MyCmd[i] == ' ') {
             return WRONG;
-        }else{
+        } else {
             myargv[cnt][pt++] = MyCmd[i];
         }
     }
@@ -201,11 +264,11 @@ int getOperatorStyle() {
         else if(MyCmd[i] == '<') redInExist = true;
     }
 
-    if(pipeExist && redInExist || (pipeExist && redOutExist) || (redInExist && redOutExist)) return WRONG;
+    if((pipeExist && redInExist) || (pipeExist && redOutExist) || (redInExist && redOutExist)) return WRONG;
 
     if(pipeExist || redInExist || redOutExist) {
         return splitCmdB();
-    }else{
+    } else {
         return splitCmdA();
     }
 
@@ -218,17 +281,39 @@ int main(int argc, char* argv[]) {
         gets(MyCmd);
         int opStyle = getOperatorStyle();
 
-        switch(opStyle){
-            case CD: mycd();break;
-            case LS: myls();break;
-            case CP: mycp();break;
-            case PIPE: myPipe();break;
-            case RED: myRed();break;
-            case EDIT: myEdit();break;
-            case COMPILE: myCompile();break;
-            case WRONG: wrongCmd();break;
-            case QUIT: clearAll();break;
-            default: break;
+        switch(opStyle) {
+        case CD:
+            mycd();
+            break;
+        case LS:
+            myls();
+            break;
+        case CP:
+            mycp();
+            break;
+        case PIPE:
+            myPipe();
+            break;
+        case REDIN:
+            myRedIn();
+            break;
+        case REDOUT:
+            myRedOut();
+            break;
+        case EDIT:
+            myEdit();
+            break;
+        case COMPILE:
+            myCompile();
+            break;
+        case WRONG:
+            wrongCmd();
+            break;
+        case QUIT:
+            clearAll();
+            break;
+        default:
+            break;
         }
     }
 }
