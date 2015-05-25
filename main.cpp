@@ -21,15 +21,39 @@ const int maxValue = 10;
 char WorkPath[maxPath];
 char MyCmdHead[maxPath];
 char MyCmd[maxPath];
-
 int CmdLength;
-int argc;
-char argv[maxValue][maxPath];
+int myargc;
+char myargv[maxValue][maxPath];
+
 enum OPER{
    QUIT,CD, LS, CP, PIPE, RED, EDIT, COMPILE, WRONG
 };
+
 void mycd() {
-    puts("mycd");
+    if(myargc != 2) {
+        puts("Wrong Command!");
+        return ;
+    }else{
+        if(strcmp(myargv[1], "..") == 0) {
+			int pt = 0;
+			int wlen = strlen(WorkPath);
+			for(int i = 0; i < wlen; i ++) {
+				if( WorkPath[i] == '/') pt = i;
+			}
+			WorkPath[pt+1] = '\0';
+		}else{
+			sprintf(WorkPath, "%s", myargv[1]);
+		}
+
+		if(chdir(WorkPath) != 0) {
+			perror("CD Error: ");
+			return ;
+        }
+        memset(MyCmdHead, '\0', sizeof(MyCmd));
+        strcat(MyCmdHead, "user@linux:");
+        strcat(MyCmdHead, WorkPath);
+        strcat(MyCmdHead, "$ ");
+    }
 }
 
 void myls() {
@@ -70,21 +94,22 @@ int splitCmdA() {
     int cnt = 0;
     int pt = 0;
 
-    for(int i = 0; i < CmdLength; i ++) {
+    for(int i = 0; i <= CmdLength; i ++) {
         if(MyCmd[i] == ' ' || MyCmd[i] == '\0') {
-            argv[cnt][pt ++] = '\0';
+            myargv[cnt][pt ++] = '\0';
             cnt ++;
             pt = 0;
         }else{
-            argv[cnt][pt++] = MyCmd[i];
+            myargv[cnt][pt++] = MyCmd[i];
         }
     }
+    myargc = cnt;
 
-    if(strcmp(argv[0], "cd") == 0) return CD;
-    else if(strcmp(argv[0], "ls") == 0) return LS;
-    else if(strcmp(argv[0], "cp") == 0) return CP;
-    else if(strcmp(argv[0], "edit") == 0) return EDIT;
-    else if(strcmp(argv[0], "compile") == 0) return COMPILE;
+    if(strcmp(myargv[0], "cd") == 0) return CD;
+    else if(strcmp(myargv[0], "ls") == 0) return LS;
+    else if(strcmp(myargv[0], "cp") == 0) return CP;
+    else if(strcmp(myargv[0], "edit") == 0) return EDIT;
+    else if(strcmp(myargv[0], "compile") == 0) return COMPILE;
     else return WRONG;
 }
 //分割|, >对应的参数字符串
@@ -94,21 +119,22 @@ int splitCmdB() {
     int prep = -2;
 
     int ret = 0;
-    for(int i = 0; i < CmdLength; i ++){
+    for(int i = 0; i <= CmdLength; i ++){
         if(MyCmd[i] == '>' || MyCmd[i] == '|' || MyCmd[i] == '\0') {
             if(MyCmd[i] == '>') ret = RED;
             if(MyCmd[i] == '|') ret = PIPE;
             if(prep == i-1) return WRONG;
             prep = i;
-            argv[cnt][pt++] = '\0';
+            myargv[cnt][pt++] = '\0';
             cnt ++;
             pt = 0;
         }else if(MyCmd[i] == ' '){
             return WRONG;
         }else{
-            argv[cnt][pt++] = MyCmd[i];
+            myargv[cnt][pt++] = MyCmd[i];
         }
     }
+    myargc = cnt;
     return ret;
 }
 //处理用户输入的参数并确定符号类型
@@ -132,7 +158,7 @@ int getOperatorStyle() {
 
 }
 
-int main() {
+int main(int argc, char* argv[]) {
     myInitialize();
     while(true) {
         printf("%s", MyCmdHead);
