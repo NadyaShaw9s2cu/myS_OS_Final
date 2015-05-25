@@ -41,8 +41,8 @@ void mycd() {
 				if( WorkPath[i] == '/') pt = i;
 			}
 			WorkPath[pt+1] = '\0';
-		}else{
-			sprintf(WorkPath, "%s", myargv[1]);
+		}else if(myargv[1][0] != '/'){
+			strcat(WorkPath, myargv[1]);
 		}
 
 		if(chdir(WorkPath) != 0) {
@@ -90,7 +90,26 @@ void myls() {
     while(wait(0) != -1);
 }
 void mycp() {
-    puts("mycp");
+    sprintf(myargv[0], "%s/", WorkPath);
+    strcat(myargv[0], "cp");
+    if(myargc != 3) {
+        puts("Wrong Command!");
+        return ;
+    }
+    char* mycmd[] = {myargv[0], myargv[1], myargv[2], NULL};
+
+    pid_t mypid;
+    if( (mypid = fork()) < 0) {
+        perror("shell fork cp error: ");
+        return ;
+    }
+    if( mypid == 0 ) {
+        if( execv("cp", mycmd) <= 0 ) {
+            perror("cp exec error: ");
+            return ;
+        }
+    }
+    while(wait(0) != -1);
 }
 void myPipe() {
     puts("mPipe");
