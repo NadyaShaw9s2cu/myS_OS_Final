@@ -57,7 +57,37 @@ void mycd() {
 }
 
 void myls() {
-    puts("myls");
+    sprintf(myargv[0], "%s/", WorkPath);
+    strcat(myargv[0], "ls");
+    if(myargc == 1) {
+        strcpy(myargv[1], ".");
+        myargc = 2;
+    }else if(myargc == 2 && strcmp(myargv[1], "-l") == 0) {
+        strcpy(myargv[2], myargv[1]);
+        strcpy(myargv[1], ".");
+        myargc = 3;
+    }
+    char* mycmd[] = {NULL, NULL, NULL, NULL};
+    if(myargc <= 3) {
+        for(int i = 0; i <myargc; i ++) {
+            mycmd[i] = myargv[i];
+        }
+    }else {
+        puts("Wrong Command!");
+        return ;
+    }
+    pid_t mypid;
+    if( (mypid = fork()) < 0) {
+        perror("shell fork ls error: ");
+        return ;
+    }
+    if( mypid == 0 ) {
+        if( execv("ls", mycmd) <= 0 ) {
+            perror("ls exec error: ");
+            return ;
+        }
+    }
+    while(wait(0) != -1);
 }
 void mycp() {
     puts("mycp");
