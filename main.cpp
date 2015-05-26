@@ -18,7 +18,7 @@
 #include <fcntl.h>
 const int maxWordLen = 65536;
 const int maxPath = 1024;
-const int maxValue = 10;
+const int maxValue = 32;
 
 char WordBufPool[maxWordLen];
 char WorkPath[maxPath];
@@ -43,8 +43,9 @@ void mycd() {
             for(int i = 0; i < wlen; i ++) {
                 if( WorkPath[i] == '/') pt = i;
             }
-            WorkPath[pt+1] = '\0';
+            WorkPath[pt] = '\0';
         } else if(myargv[1][0] != '/') {
+            strcat(WorkPath, "/");
             strcat(WorkPath, myargv[1]);
         }
 
@@ -115,20 +116,34 @@ void mycp() {
     }
     while(wait(0) != -1);
 }
-
+//progA|progB
 void myPipe() {
-    puts("mPipe");
+    char buf[maxPath];
+    sprintf(buf, "%s/", WorkPath);
+    strcat(buf, "pipe");
+    char* mycmd[] = {buf, myargv[0], myargv[1],NULL};
+
+    pid_t mypid;
+    if( (mypid = fork()) < 0) {
+        perror("pipe fork error: ");
+        return ;
+    }
+    if( mypid == 0 ) {
+        if( execv("pipe", mycmd) <= 0 ) {
+            perror("pipe exec error: ");
+            return ;
+        }
+    }
+    while(wait(0) != -1);
 }
 
 //redirect input
 void myRedIn() {
-
+    if(myargc != 2) {
+        puts("Command Error.");
+        return ;
+    }
     pid_t pid;
-    char buf[maxPath];
-    strcpy(buf, WorkPath);
-    strcat(buf, "/");
-    strcat(buf, myargv[0]);
-
     if((pid = fork()) == -1) {
         perror("Redirect fork error:");
         exit(-1);
@@ -144,46 +159,63 @@ void myRedIn() {
             return ;
         }
 
-        char* mycmd[]= {buf, NULL};
+        char* mycmd[]= {myargv[0], NULL};
         if( execv(myargv[0], mycmd) < 0) {
             perror("Redirect execlp error:");
             exit(-1);
         }
     }
 
-    if(pid != 0) {
-        wait(NULL);
-    }
+    if(pid) while(wait(0) != -1) ;
 }
 void myRedOut() {
+    if(myargc != 2) {
+        puts("Command Error.");
+        return ;
+    }
     pid_t pid;
-    int fd = 0;
 
     if((pid = fork()) == -1) {
         perror("Redirect fork error:");
         exit(-1);
     }
-    char buf[maxPath];
-    strcpy(buf, WorkPath);
-    strcat(buf, "/");
-    strcat(buf, myargv[0]);
 
     if(pid == 0) {
         close(1);
-        fd = creat(myargv[1], 0644);
-        char* mycmd[]= {buf, NULL};
+        int fd = creat(myargv[1], 0644);
+        if(fd < 0) {
+            perror("Create Pipe Error:");
+            return ;
+        }
+        char* mycmd[]= {myargv[0], NULL};
         if( execv(myargv[0], mycmd) < 0) {
             perror("Redirect execlp error:");
-            exit(-1);
+            return ;
         }
     }
-
-    if(pid != 0) {
-        wait(NULL);
-    }
+    if(pid)while(wait(0) != -1);
 }
 void myEdit() {
-    puts("myEdit");
+    sprintf(myargv[0], "%s/", WorkPath);
+    strcat(myargv[0], "edit");
+    char* mycmd[35];
+    for(int i = 0; i < myargc; i ++)
+        mycmd[i] = myargv[i];
+    mycmd[myargc] = NULL;
+
+    pid_t mypid;
+    if( (mypid = fork()) < 0) {
+        perror("shell fork edit error: ");
+        return ;
+    }
+
+    if( mypid == 0 ) {
+        if( execv("edit", mycmd) <= 0 ) {
+            perror("edit exec error: ");
+            return ;
+        }
+    }
+    while(wait(NULL) != -1);
 }
 void myCompile() {
     puts("myCompile");
@@ -256,9 +288,16 @@ int splitCmdB() {
 int getOperatorStyle() {
     CmdLength = strlen(MyCmd);
     if(CmdLength == 1 && MyCmd[0] == 'q') return QUIT;
+    char _e[6] = "edit ";
+    bool isEdit = (CmdLength >= 5?true:false);
+    for(int i = 0; i < 5; i ++){
+        if(MyCmd[i] != _e[i]) {
+            isEdit = false;break;
+        }
+    }
 
     bool pipeExist = false, redOutExist = false, redInExist = false;
-    for(int i = 0; i < CmdLength; i ++) {
+    for(int i = 0; i < CmdLength && !isEdit; i ++) {
         if(MyCmd[i] == '|') pipeExist = true;
         else if(MyCmd[i] == '>') redOutExist = true;
         else if(MyCmd[i] == '<') redInExist = true;
